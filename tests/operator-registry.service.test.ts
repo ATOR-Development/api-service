@@ -98,12 +98,11 @@ describe('OperatorRegistryService', () => {
       const good = await service.getOperators()
       expect(good.length).toBeGreaterThan(0)
 
-      // Point the client at a dead port and expire the cache. /operators is a public
-      // endpoint, so a node blip must degrade to slightly-stale data, never to an empty
-      // list — an empty list reads as "every operator left the network".
-      ;(service as any).ao = {
-        readView: () => Promise.reject(new Error('connect ECONNREFUSED'))
-      }
+      // Make the next read fail and expire the cache. /operators is a public endpoint, so a
+      // node blip must degrade to slightly-stale data, never to an empty list — an empty
+      // list reads as "every operator left the network".
+      ;(service as any).fetchOperators =
+        () => Promise.reject(new Error('connect ECONNREFUSED'))
       const stale = await service.getOperators()
       expect(stale).toEqual(good)
     } finally {

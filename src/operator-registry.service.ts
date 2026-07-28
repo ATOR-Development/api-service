@@ -1,11 +1,9 @@
-import { AoClient, createAoClient, nodeUrlFromEnv } from '@anyone-protocol/ao-client'
-
+import { nodeUrlFromEnv, readView } from './util/ao-read'
 import { logger } from './util/logger'
 
 export class OperatorRegistryService {
   private readonly operatorRegistryProcessId: string
   private readonly hbUrl: string
-  private readonly ao: AoClient
 
   private operatorRegistryCacheTtlSeconds: number = 0
   private operatorRegistryCacheTimestamp: number = 0
@@ -27,16 +25,6 @@ export class OperatorRegistryService {
     // caused by endpoints nobody had set explicitly.
     this.hbUrl = nodeUrlFromEnv()
     logger.info(`Reading operator registry from node [${this.hbUrl}]`)
-
-    // Reads only — this service never writes to the operator registry, so no signer.
-    this.ao = createAoClient({
-      url: this.hbUrl,
-      logger: {
-        debug: (m, ...meta) => logger.debug(m, ...meta),
-        warn: (m, ...meta) => logger.warn(m, ...meta),
-        error: (m, ...meta) => logger.error(m, ...meta)
-      }
-    })
 
     this.operatorRegistryCacheTtlSeconds =
       parseInt(process.env.OPERATOR_REGISTRY_CACHE_TTL_SECONDS || '0')
@@ -70,7 +58,8 @@ export class OperatorRegistryService {
    * throw them away.
    */
   private async fetchOperators(): Promise<string[]> {
-    const operators = await this.ao.readView<Record<string, boolean>>(
+    const operators = await readView<Record<string, boolean>>(
+      this.hbUrl,
       this.operatorRegistryProcessId,
       'operators'
     )

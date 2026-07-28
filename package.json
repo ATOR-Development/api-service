@@ -25,8 +25,6 @@
     "typescript": "^5.4.3"
   },
   "dependencies": {
-    "@anyone-protocol/ao-client": "github:anyone-protocol/ao-client#v0.1.2",
-    "@dha-team/arbundles": "^1.0.4",
     "@ethers-ext/provider-multicall": "^6.0.0-beta.3",
     "@maxmind/geoip2-node": "^6.1.0",
     "@types/express": "^4.17.21",
