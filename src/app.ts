@@ -1,4 +1,3 @@
-import 'reflect-metadata';
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -11,7 +10,7 @@ import { H3Service } from './H3Service';
 import { GeoLiteService } from './GeoLiteService';
 import { OperatorRegistryService } from './operator-registry.service';
 import { UnsTokenQueryService } from './uns-token.repository';
-import { initUnsIndexerDataSource } from './data-source';
+import { initUnsIndexerDb } from './data-source';
 import mongoose from 'mongoose';
 dotenv.config();
 
@@ -348,7 +347,7 @@ const bootstrap = async () => {
         console.log(`Connecting to MongoDB at [${mongodbUri}]`);
         await mongoose.connect(mongodbUri);
         try {
-            await initUnsIndexerDataSource();
+            await initUnsIndexerDb();
         } catch (error) {
             console.error(
                 'Failed to initialize UNS indexer data source:',

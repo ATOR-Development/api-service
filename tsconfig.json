@@ -6,8 +6,6 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
     // "node" alone excluded @types/jest, so every test in tests/ failed to compile with
     // "Cannot find name 'describe'" — the suite could not run at all.
     "types": ["node", "jest"]
