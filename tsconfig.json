@@ -5,10 +5,17 @@
     "outDir": "./dist",
     "strict": true,
     "strictPropertyInitialization": false,
+    // ao-client's .d.ts imports @dha-team/arbundles via an `exports` subpath, which the
+    // node10 resolution this CJS project uses cannot follow. Runtime require() resolves it
+    // fine (node's own resolver honours `exports`), so skip lib checking rather than move
+    // the whole service to node16 module resolution. Matches the ported Nest services.
+    "skipLibCheck": true,
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    "types": ["node"]
+    // "node" alone excluded @types/jest, so every test in tests/ failed to compile with
+    // "Cannot find name 'describe'" — the suite could not run at all.
+    "types": ["node", "jest"]
   },
   "include": ["src/**/*.ts", "shim.d.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules"]
