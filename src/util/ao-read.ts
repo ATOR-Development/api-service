@@ -38,8 +38,18 @@ export function nodeUrlFromEnv(varName = 'HB_URL'): string {
 export class AoReadError extends Error {}
 
 /**
- * Invoke a contract view: `GET <node>/<pid>~process@1.0/now/~lua@5.3a/<name>[?params]`.
+ * Invoke a contract view: `GET <node>/<pid>~process@1.0/as/<name>[?params]`.
  * This is the replacement for a legacynet `dryrun` carrying an `Action` tag.
+ *
+ * ⚠️ `as/`, NOT `now/~lua@5.3a/` — load-bearing since the contracts moved their state into Lua
+ * globals (D32). `now` resolves FIRST and hands the Lua device a priv-stripped message, so it
+ * re-initialises a FRESH VM from the module: the view function is present and callable, but
+ * every data global is nil. The result is HTTP 200 with EMPTY state — a silent wrong answer,
+ * not an error. `as/` applies the execution device to the LOADED process instead.
+ *
+ * This service keeps its own reader rather than depending on @anyone-protocol/ao-client, so a
+ * change to the read path has to be made in both places. ao-client made the same change in
+ * v0.1.3.
  */
 export async function readView<T = unknown>(
   nodeUrl: string,
@@ -54,7 +64,7 @@ export async function readView<T = unknown>(
       ).toString()
     : ''
   const url =
-    `${nodeUrl.replace(/\/+$/, '')}/${processId}~process@1.0/now/~lua@5.3a/${name}${query}`
+    `${nodeUrl.replace(/\/+$/, '')}/${processId}~process@1.0/as/${name}${query}`
 
   let lastError: Error | undefined
 
@@ -73,7 +83,7 @@ export async function readView<T = unknown>(
       if (!response.ok) {
         throw new AoReadError(
           `node returned ${response.status} reading view "${name}" ` +
-            `(${processId}/now/~lua@5.3a/${name})`
+            `(${processId}/as/${name})`
         )
       }
 
