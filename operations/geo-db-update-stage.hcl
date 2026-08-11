@@ -1,3 +1,8 @@
+variable "commit_sha" {
+  type        = string
+  description = "The git commit SHA to use for the runtime image tag"
+}
+
 job "geo-db-update-stage" {
   datacenters = ["ator-fin"]
   type = "batch"
@@ -26,7 +31,7 @@ job "geo-db-update-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/anyone-protocol/api-service:DEPLOY_TAG"
+        image = "ghcr.io/anyone-protocol/api-service:${var.commit_sha}"
         command = "npm"
         args = [
           "run",
