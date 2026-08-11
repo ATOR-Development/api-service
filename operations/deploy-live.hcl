@@ -95,7 +95,7 @@ job "api-service-live" {
         HEXAGON_RESOLUTION="4"
         GEODATADIR="/api-service-live/geo-ip-db/data"
         GEOTMPDIR="/api-service-live/tmp"
-        CU_URL="https://cu.anyone.tech"
+        HB_URL="https://hb.anyone.tech"
         DB_NAME="uns_indexer"
       }
 

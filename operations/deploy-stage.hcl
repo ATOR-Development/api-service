@@ -95,7 +95,7 @@ job "api-service-stage" {
         HEXAGON_RESOLUTION="4"
         GEODATADIR="/api-service-stage/geo-ip-db/data"
         GEOTMPDIR="/api-service-stage/tmp"
-        CU_URL="https://cu-stage.anyone.tech"
+        HB_URL="https://hb-stage.anyone.tech"
         DB_NAME="uns_indexer"
       }
 

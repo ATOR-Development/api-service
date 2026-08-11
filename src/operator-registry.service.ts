@@ -1,22 +1,13 @@
-import _ from 'lodash'
+import { nodeUrlFromEnv, readView } from './util/ao-read'
 import { logger } from './util/logger'
-import { sendAosDryRun } from './util/send-aos-message'
-
-export interface OperatorRegistryState {
-  ClaimableFingerprintsToOperatorAddresses: { [fingerprint: string]: string }
-  VerifiedFingerprintsToOperatorAddresses: { [fingerprint: string]: string }
-  BlockedOperatorAddresses: { [fingerprint: string]: boolean }
-  RegistrationCreditsFingerprintsToOperatorAddresses: {
-    [fingerprint: string]: string
-  }
-  VerifiedHardwareFingerprints: { [fingerprint: string]: boolean }
-}
 
 export class OperatorRegistryService {
   private readonly operatorRegistryProcessId: string
+  private readonly hbUrl: string
+
   private operatorRegistryCacheTtlSeconds: number = 0
   private operatorRegistryCacheTimestamp: number = 0
-  private operatorRegistryCachedState: OperatorRegistryState | null = null
+  private operatorRegistryCachedOperators: string[] | null = null
 
   constructor() {
     logger.info('Initializing OperatorRegistryService...')
@@ -29,6 +20,12 @@ export class OperatorRegistryService {
       `Using operator registry process ID [${this.operatorRegistryProcessId}]`
     )
 
+    // Fail closed, no default. Replaces CU_URL/GATEWAY_URL/GRAPHQL_URL, two of which
+    // pointed at third-party infrastructure. The outage that forced this migration was
+    // caused by endpoints nobody had set explicitly.
+    this.hbUrl = nodeUrlFromEnv()
+    logger.info(`Reading operator registry from node [${this.hbUrl}]`)
+
     this.operatorRegistryCacheTtlSeconds =
       parseInt(process.env.OPERATOR_REGISTRY_CACHE_TTL_SECONDS || '0')
     if (
@@ -37,7 +34,7 @@ export class OperatorRegistryService {
     ) {
       this.operatorRegistryCacheTtlSeconds = 0
       logger.warn(
-        `Invalid OPERATOR_REGISTRY_CACHE_TTL_SECONDS ` + 
+        `Invalid OPERATOR_REGISTRY_CACHE_TTL_SECONDS ` +
           `[${process.env.OPERATOR_REGISTRY_CACHE_TTL_SECONDS}]. ` +
           `Using default value of 0.`
       )
@@ -49,42 +46,47 @@ export class OperatorRegistryService {
     logger.info('OperatorRegistryService initialized.')
   }
 
-  static async getOperatorRegistryState(
-    operatorRegistryProcessId: string
-  ): Promise<OperatorRegistryState> {
-    const { result } = await sendAosDryRun({
-      processId: operatorRegistryProcessId,
-      tags: [{ name: 'Action', value: 'View-State' }],
-    })
-    const state = JSON.parse(result.Messages[0].Data)
+  /**
+   * Active operator addresses: unique verified, minus blocked.
+   *
+   * This was a `View-State` dryrun that downloaded all five registry maps so the
+   * service could uniq the values of one and difference them against the keys of
+   * another. The native contract added the `operators` view for exactly this consumer
+   * and does that work on-device, returning a SET (`{[address]: true}`) — already
+   * deduped, already filtered. So the whole lodash pipeline collapses into reading the
+   * keys, and we stop shipping the claimable/credit/hardware maps over the wire to
+   * throw them away.
+   */
+  private async fetchOperators(): Promise<string[]> {
+    const operators = await readView<Record<string, boolean>>(
+      this.hbUrl,
+      this.operatorRegistryProcessId,
+      'operators'
+    )
 
-    for (const prop in state) {
-      // NB: Lua returns empty tables as JSON arrays, so we normalize them to
-      //     empty objects as when they are populated they will also be objects
-      if (Array.isArray(state[prop]) && state[prop].length < 1) {
-        state[prop] = {}
-      }
-    }
-
-    return state
+    // NB: Lua serializes an EMPTY table as a JSON array, so an empty registry arrives as
+    //     `[]` rather than `{}`. Object.keys handles both, but be explicit about why the
+    //     shape can vary.
+    return Object.keys(operators)
   }
 
   async getOperators() {
     const now = Date.now()
     const cacheAge = (now - this.operatorRegistryCacheTimestamp) / 1000
     if (
-      !this.operatorRegistryCachedState ||
+      !this.operatorRegistryCachedOperators ||
       cacheAge >= this.operatorRegistryCacheTtlSeconds
     ) {
       logger.info(
         'Fetching operator registry state because the cache is empty or expired'
       )
       try {
-        this.operatorRegistryCachedState = await OperatorRegistryService
-          .getOperatorRegistryState(this.operatorRegistryProcessId)
+        this.operatorRegistryCachedOperators = await this.fetchOperators()
         this.operatorRegistryCacheTimestamp = now
         logger.info(`Operator registry state fetched successfully!`)
       } catch (error: Error | any) {
+        // Deliberately keep serving the stale list: this backs a public endpoint, and a
+        // node blip should degrade to slightly-old data rather than an empty response.
         logger.error(
           `Failed to get Operator Registry State: ${error.message}`,
           error
@@ -96,36 +98,15 @@ export class OperatorRegistryService {
       )
     }
 
-    if (!this.operatorRegistryCachedState) {
+    if (!this.operatorRegistryCachedOperators) {
       logger.error('Operator registry state is not available!')
       return []
     }
 
-    const verifiedOperatorAddresses = _.uniq(
-      Object.values(
-        this.operatorRegistryCachedState.VerifiedFingerprintsToOperatorAddresses
-      )
-    )
     logger.info(
-      `Found [${verifiedOperatorAddresses.length}] verified operator addresses.`
+      `Found [${this.operatorRegistryCachedOperators.length}] operator addresses`
     )
 
-    const blockedOperatorAddresses = Object.keys(
-      this.operatorRegistryCachedState.BlockedOperatorAddresses
-    )
-    logger.info(
-      `Found [${blockedOperatorAddresses.length}] blocked operator addresses.`
-    )
-  
-    const operatorAddresses = _.difference(
-      verifiedOperatorAddresses,
-      blockedOperatorAddresses
-    )
-    logger.info(
-      `Found [${operatorAddresses.length}] operator addresses after ` +
-        `filtering out blocked operator addresses`
-    )
-
-    return operatorAddresses
+    return this.operatorRegistryCachedOperators
   }
 }

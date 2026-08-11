@@ -1,5 +1,4 @@
-import { initUnsIndexerDataSource, unsIndexerDataSource } from './data-source'
-import { UnsTokenEntity } from './schema/uns-token.entity'
+import { initUnsIndexerDb, unsIndexerPool } from './data-source'
 import { logger } from './util/logger'
 
 export interface AnyoneDomain {
@@ -45,11 +44,14 @@ export class UnsTokenQueryService {
     }
 
     try {
-      await initUnsIndexerDataSource()
-      const repo = unsIndexerDataSource.getRepository(UnsTokenEntity)
-      const rows = await repo.find({
-        select: ['tokenId', 'name', 'owner']
-      })
+      await initUnsIndexerDb()
+      // `tokenId` is camelCase in the table, so it MUST stay quoted — Postgres folds
+      // unquoted identifiers to lowercase and the column would not be found.
+      const { rows } = await unsIndexerPool().query<{
+        tokenId: string
+        name: string
+        owner: string
+      }>('SELECT "tokenId", "name", "owner" FROM uns_tokens')
       const domains: AnyoneDomain[] = rows.map(row => ({
         tokenId: row.tokenId,
         name: row.name,

@@ -1,34 +1,37 @@
-import 'reflect-metadata'
-import { DataSource } from 'typeorm'
+import { Pool } from 'pg'
 
-import { UnsTokenEntity } from './schema/uns-token.entity'
 import { logger } from './util/logger'
 
+/**
+ * Read-only connection to the Postgres database owned by the `uns-record-indexer`
+ * microservice.
+ *
+ * This used to be a TypeORM DataSource with a mirrored UnsTokenEntity. That mirror
+ * declared eleven columns to read three, and had to be kept in step with a schema owned
+ * by another repository — while every feature that justifies an ORM was switched off:
+ * `synchronize: false`, `migrationsRun: false`, migrations authoritative in the indexer,
+ * and a read-only role here. The one query is a full-table select of three columns, so
+ * it is plain `pg` now. That also drops the typeorm -> glob -> minimatch ->
+ * brace-expansion advisory chain, which had no non-breaking fix.
+ */
 const DB_HOST = process.env.DB_HOST || ''
 const DB_PORT = parseInt(process.env.DB_PORT || '5432')
 const DB_USER = process.env.DB_USER || ''
 const DB_PASS = process.env.DB_PASS || ''
 const DB_NAME = process.env.DB_NAME || ''
 
-export const unsIndexerDataSource = new DataSource({
-  type: 'postgres',
-  host: DB_HOST,
-  port: DB_PORT,
-  username: DB_USER,
-  password: DB_PASS,
-  database: DB_NAME,
-  entities: [UnsTokenEntity],
-  synchronize: false,
-  migrationsRun: false,
-  logging: false
-})
+let pool: Pool | null = null
+let initializePromise: Promise<Pool> | null = null
 
-let initializePromise: Promise<DataSource> | null = null
-
-export async function initUnsIndexerDataSource(): Promise<DataSource> {
-  if (unsIndexerDataSource.isInitialized) {
-    return unsIndexerDataSource
+export function unsIndexerPool(): Pool {
+  if (!pool) {
+    throw new Error('UNS indexer pool used before initUnsIndexerDb()')
   }
+  return pool
+}
+
+export async function initUnsIndexerDb(): Promise<Pool> {
+  if (pool) { return pool }
 
   const missing = [
     ['DB_HOST', DB_HOST],
@@ -48,21 +51,30 @@ export async function initUnsIndexerDataSource(): Promise<DataSource> {
 
   if (!initializePromise) {
     logger.info(
-      `Initializing UNS indexer Postgres data source at ` +
+      `Initializing UNS indexer Postgres pool at ` +
         `[${DB_HOST}:${DB_PORT}/${DB_NAME}]...`
     )
-    initializePromise = unsIndexerDataSource
-      .initialize()
-      .then(ds => {
-        logger.info('UNS indexer Postgres data source initialized.')
-        return ds
+    const candidate = new Pool({
+      host: DB_HOST,
+      port: DB_PORT,
+      user: DB_USER,
+      password: DB_PASS,
+      database: DB_NAME
+    })
+    // TypeORM's initialize() opened a connection, so failures surfaced at boot rather
+    // than on the first request. Keep that: a pg Pool is lazy on its own.
+    initializePromise = candidate
+      .query('SELECT 1')
+      .then(() => {
+        pool = candidate
+        logger.info('UNS indexer Postgres pool initialized.')
+        return candidate
       })
       .catch(error => {
         initializePromise = null
-        throw error
+        return candidate.end().catch(() => {}).then(() => { throw error })
       })
   }
 
   return initializePromise
 }
-

@@ -6,9 +6,9 @@
     "strict": true,
     "strictPropertyInitialization": false,
     "esModuleInterop": true,
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true,
-    "types": ["node"]
+    // "node" alone excluded @types/jest, so every test in tests/ failed to compile with
+    // "Cannot find name 'describe'" — the suite could not run at all.
+    "types": ["node", "jest"]
   },
   "include": ["src/**/*.ts", "shim.d.ts", "scripts/**/*.ts"],
   "exclude": ["node_modules"]
