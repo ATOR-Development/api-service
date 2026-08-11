@@ -22,11 +22,3 @@ jobs:
           docker-username: ${{ github.actor }}
           docker-password: ${{ secrets.GITHUB_TOKEN }}
           docker-tag: ${{ github.sha }}
-      - name: Deploy
-        uses: ./.github/actions/deploy
-        with:
-          environment: stage
-          nomad-cacert: operations/admin-ui-ca.crt
-          nomad-token: ${{ secrets.NOMAD_TOKEN_API_SERVICE_DEPLOY }}
-          nomad-addr: ${{ secrets.NOMAD_ADDR }}
-          docker-tag: ${{ github.sha }}
