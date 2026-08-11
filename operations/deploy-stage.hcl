@@ -1,3 +1,8 @@
+variable "commit_sha" {
+  type        = string
+  description = "The git commit SHA to use for the runtime image tag"
+}
+
 job "api-service-stage" {
   datacenters = ["ator-fin"]
   type = "service"
@@ -66,7 +71,7 @@ job "api-service-stage" {
       driver = "docker"
 
       config {
-        image = "ghcr.io/anyone-protocol/api-service:DEPLOY_TAG"
+        image = "ghcr.io/anyone-protocol/api-service:${var.commit_sha}"
         force_pull = true
         command = "node"
         args = [
@@ -82,7 +87,7 @@ job "api-service-stage" {
       }
 
       env {
-        VERSION="DEPLOY_TAG"
+        VERSION = var.commit_sha
         ONIONOO_PROTOCOL="http://"
         CLUSTER="local"
         ENV="main"
